@@ -1,0 +1,127 @@
+---
+title: "tutorial_05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+**Part 1**
+```{r}
+library(dplyr)
+olympics<-read.csv("../data/athlete_events.csv")
+by_year<-olympics%>%
+  filter(Season=='Summer')%>%
+  arrange(Year)%>%
+  group_by(Year)
+q1_tbl<-summarize(by_year,n_noc=length(unique(NOC)))
+q1_tbl
+```
+
+**Part 2**
+
+Create a tibble q2_tbl that contains the number of years since the previous summer olympics. What was the longest and shortest number of years between Olympics?
+
+Shortest number of years is 4 while longest number of years is 12
+```{r}
+
+q2_tbl<-q1_tbl%>%
+  mutate(lag=lag(Year),yrs_to_past=Year-lag,.after=Year)%>%
+  select(Year,yrs_to_past)
+q2_tbl
+#min_rank(q2_tbl$yrs_to_past)
+```
+**Part 3**
+we need to find mean row-wise
+Not quite sure why do we have to use filter from stats package
+
+```{r}
+by_year_1952<-q1_tbl%>%
+  filter(Year>1950)
+q3_tbl<-by_year_1952%>%
+  mutate(yr_bef=lag(n_noc),yr_aft=lead(n_noc))%>%
+  rowwise()%>%
+  mutate(ma=mean(c_across(n_noc:yr_aft),na.rm=TRUE))
+q3_tbl
+
+```
+
+**Part 4**
+
+Compute the proportion of total athletes in each Games that an NOC sends.Store your output in q4_tbl.
+
+idea: using ID to keep track number of athletes and can use .groups to change what we have grouped initially
+```{r}
+q4_tbl<-olympics%>%
+  filter(Season=='Summer')%>%
+  select(ID,Year,NOC)%>%
+  group_by(Year,NOC)%>%
+  summarise(noc_ath=length(unique(ID)),.groups="drop_last")%>%
+  mutate(tot_ath=sum(noc_ath),prop=noc_ath/tot_ath)%>%
+  ungroup()
+q4_tbl
+```
+
+**Part 5**
+In which year after 1950 did the USA contingent first become the majority participant of the Olympic games?
+
+Idea:we can rank the proportions from q4 to determine the majority participant
+The first year that USA contingent first become majority participant is in 1956
+```{r}
+q5_tbl<-q4_tbl%>%
+  filter(Year>1950)%>%
+  group_by(Year)%>%
+  mutate(rank=dense_rank(desc(prop)))%>%
+  filter(NOC=='USA',rank==1)
+#To print out first occurence of USA being majority
+q5_tbl[1,]
+```
+
+**Part 6**
+For each athlete, compute the number of Olympics participated in before receiving his/her first medal.
+If he/she never won a medal, put the value down as Inf. If he/she won a medal in their first Games,
+then put the value as 0. Store your output data frame as q6_tbl.
+Idea:For medals, find index of first non-NA. Look at year and rank the years. using index of first non-NA we find out the year when first medal was won.
+```{r}
+#function which takes in year and medal as parameters
+non_na<-function(x,y){
+  indexes<-which(!is.na(y))
+  year_rank<-dense_rank(x)
+  #meaning no medal won
+  if (length(indexes)==0){
+    return (Inf)
+  }else{
+    minimum<-min(indexes)
+    return (year_rank[minimum]-1)
+  }
+}
+q6_tbl<-olympics%>%
+  filter(Season=='Summer')%>%
+  group_by(ID)%>%
+  arrange(Year)%>%
+  summarise(num_ol_bef=non_na(Year,Medal))
+q6_tbl
+  
+  
+```
+**Part 7**
+Idea:First we filter out from year 2016 then we use str_extract to label which data is men,women and mixed
+```{r}
+library(stringr)
+q7_tbl<-olympics%>%
+  filter(Season=='Summer',Year==2016)%>%
+  mutate(gender=str_extract(Event,"(Women)|(Men)|(Mixed)"))%>%
+  filter(!gender=='Mixed')%>%
+  group_by(gender,Sport)%>%
+  summarise(ave_ht=mean(Height,na.rm=TRUE),ave_wt=mean(Weight,na.rm=TRUE))
+q7_tbl
+  
+```
+
+**Part 8**
+One question that interests me is, is there any relationship between the sports played and the average height of the players(both men and female)?
+More specifically, are basketball players particularly taller than other sports players
+
+
